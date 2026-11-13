@@ -35,7 +35,7 @@ async def test_command_schema_and_admin_checks(db):
 async def test_modal_valid_and_invalid(db):
     modal = BirthdayModal(db,1,7)
     modal.day._value = '29'
-    modal.month._value = '2'
+    modal.month._values = ['2']
     i = interaction()
     await modal.on_submit(i)
     assert db.birthdays(1)[0]['day'] == 29
@@ -95,7 +95,7 @@ async def test_announcement_mentions(tmp_path,mode,users,roles):
 @pytest.mark.asyncio
 async def test_modal_rechecks_admin_permission(db):
     modal = BirthdayModal(db,1,99)
-    modal.day._value, modal.month._value = '5','6'
+    modal.day._value, modal.month._values = '5',['6']
     i = interaction()
     i.permissions.manage_guild = False
     await modal.on_submit(i)
@@ -134,3 +134,33 @@ async def test_departed_member_removed(tmp_path):
     await bot.send_birthday({'guild_id':1},{'user_id':7},'Hi {user}')
     assert not bot.db.birthdays(1)
     await bot.close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('month', range(1, 13))
+async def test_month_dropdown_submits_calendar_month(db, month):
+    modal = BirthdayModal(db, 1, 7)
+    components = modal.to_dict()['components']
+    assert [item['type'] for item in components] == [18, 18]
+    select = components[1]['component']
+    assert select['type'] == 3
+    assert select['min_values'] == select['max_values'] == 1
+    assert [option['value'] for option in select['options']] == [str(n) for n in range(1, 13)]
+    assert select['options'][0]['label'] == 'January'
+    assert select['options'][-1]['label'] == 'December'
+    modal.day._value = '15'
+    modal.month._values = [str(month)]
+    await modal.on_submit(interaction())
+    assert db.birthdays(1)[0]['month'] == month
+
+
+@pytest.mark.asyncio
+async def test_month_dropdown_requires_selection_and_isolates_forms(db):
+    first, second = BirthdayModal(db, 1, 7), BirthdayModal(db, 1, 8)
+    first.month._values = ['12']
+    second.day._value = '15'
+    i = interaction()
+    await second.on_submit(i)
+    assert not db.birthdays(1)
+    assert 'valid' in i.response.send_message.call_args.args[0]
+    assert second.month.values == []
