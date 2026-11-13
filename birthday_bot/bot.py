@@ -1,5 +1,6 @@
 import logging
 import os
+import calendar
 
 import discord
 from discord import app_commands
@@ -12,21 +13,26 @@ log = logging.getLogger(__name__)
 
 
 class BirthdayModal(discord.ui.Modal, title='Register birthday'):
-    day = discord.ui.TextInput(label='Day (1–31)', max_length=2)
-    month = discord.ui.TextInput(label='Month (1–12)', max_length=2)
-
     def __init__(self, db, guild, user):
         super().__init__()
         self.db, self.guild, self.user = db, guild, user
+        self.day = discord.ui.TextInput(placeholder='e.g. 25', max_length=2)
+        self.month = discord.ui.Select(
+            placeholder='Choose your birth month', min_values=1, max_values=1,
+            options=[discord.SelectOption(label=calendar.month_name[month], value=str(month))
+                     for month in range(1, 13)],
+        )
+        self.add_item(discord.ui.Label(text='Day (1–31)', component=self.day))
+        self.add_item(discord.ui.Label(text='Month', component=self.month))
 
     async def on_submit(self, interaction):
         if interaction.guild_id != self.guild or (interaction.user.id != self.user and not interaction.permissions.manage_guild):
             await interaction.response.send_message('You no longer have permission to change this birthday.', ephemeral=True)
             return
         try:
-            self.db.set_birthday(self.guild, self.user, int(self.day.value), int(self.month.value))
-        except ValueError:
-            await interaction.response.send_message('Enter a valid day and month, e.g. 25 and 12.', ephemeral=True)
+            self.db.set_birthday(self.guild, self.user, int(self.day.value), int(self.month.values[0]))
+        except (ValueError, IndexError):
+            await interaction.response.send_message('Enter a valid day for the selected month, e.g. 25 and December.', ephemeral=True)
             return
         await interaction.response.send_message('Birthday saved! Only day and month are stored. Server members can view it using /birthday list. Remove it with /birthday remove.', ephemeral=True)
 
